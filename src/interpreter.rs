@@ -1,8 +1,9 @@
+use std::{cell::RefCell, collections::HashMap, io::Write, ops::ControlFlow, rc::Rc};
+
 use anyhow::Result;
-use std::{collections::HashMap, ops::ControlFlow, rc::Rc};
 
 use crate::{
-    callable::{LoxClass, LoxFunction, Native},
+    callable::{LoxClass, LoxFunction, LoxInstance, Native},
     constants::{errors::*, INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD},
     environment::Environment,
     error::LoxError,
@@ -15,6 +16,7 @@ pub struct Interpreter {
     globals: Environment,
     environment: Environment,
     locals: HashMap<usize, usize>,
+    output: Option<Rc<RefCell<Vec<u8>>>>,
 }
 
 impl Default for Interpreter {
@@ -32,6 +34,20 @@ impl Interpreter {
             globals: environment.clone(),
             environment,
             locals: HashMap::new(),
+            output: None,
+        }
+    }
+
+    pub fn new_with_buffer() -> Self {
+        let mut i = Self::new();
+        i.output = Some(Rc::new(RefCell::new(Vec::new())));
+        i
+    }
+
+    pub fn drain_output(&self) -> Vec<u8> {
+        match &self.output {
+            Some(buf) => std::mem::take(&mut *buf.borrow_mut()),
+            None => unreachable!(),
         }
     }
 
@@ -108,9 +124,16 @@ impl Interpreter {
                 }
             }
             Statement::Print(expr) => {
-                match self.evaluate(expr)? {
-                    Literal::Number(n) => println!("{n}"),
-                    val => println!("{val}"),
+                let value = self.evaluate(expr)?;
+                let output_str = match &value {
+                    Literal::Number(n) => format!("{n}"),
+                    _ => format!("{value}"),
+                };
+                match &self.output {
+                    Some(buf) => {
+                        let _ = writeln!(buf.borrow_mut(), "{output_str}");
+                    }
+                    None => println!("{output_str}"),
                 }
                 Ok(ControlFlow::Continue(()))
             }
@@ -236,8 +259,8 @@ impl Interpreter {
             Expression::Get { object, name } => {
                 let object = self.evaluate(object)?;
                 match object {
-                    Literal::Instance(instance) => instance.borrow().get(name)?,
-                    _ => return Err(self.type_error(ONLY_INSTANCES_HAVE_FIELDS)),
+                    Literal::Instance(instance) => LoxInstance::get(&instance, name)?,
+                    _ => return Err(self.type_error(ONLY_INSTANCES_HAVE_PROPERTIES)),
                 }
             }
             Expression::Grouping(expr) => self.evaluate(expr)?,

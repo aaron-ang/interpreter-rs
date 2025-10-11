@@ -265,6 +265,10 @@ impl<'a> Resolver<'a> {
     }
 
     fn error(&self, token: &Token, message: &str) -> LoxError {
-        LoxError::resolver_error(token.line, &token.lexeme, message)
+        LoxError::SyntaxError {
+            line: token.line,
+            lexeme: token.lexeme.clone(),
+            message: message.to_string(),
+        }
     }
 }

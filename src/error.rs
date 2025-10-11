@@ -2,13 +2,15 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum LoxError {
-    #[error("[line {line}] {error_type} Error at '{lexeme}': {message}")]
+    #[error("[line {line}] Error at '{lexeme}': {message}")]
     SyntaxError {
         line: usize,
-        error_type: &'static str,
         lexeme: String,
         message: String,
     },
+
+    #[error("[line {line}] Error at end: {message}")]
+    SyntaxErrorAtEnd { line: usize, message: String },
 
     #[error("{0}")]
     TypeError(String),
@@ -21,24 +23,4 @@ pub enum LoxError {
 
     #[error("Expected {expected} arguments but got {got}.")]
     ArgumentCountError { expected: usize, got: usize },
-}
-
-impl LoxError {
-    pub fn parser_error(line: usize, lexeme: &str, message: &str) -> Self {
-        Self::SyntaxError {
-            line,
-            error_type: "Parser",
-            lexeme: lexeme.to_string(),
-            message: message.to_string(),
-        }
-    }
-
-    pub fn resolver_error(line: usize, lexeme: &str, message: &str) -> Self {
-        Self::SyntaxError {
-            line,
-            error_type: "Resolver",
-            lexeme: lexeme.to_string(),
-            message: message.to_string(),
-        }
-    }
 }

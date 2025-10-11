@@ -6,7 +6,7 @@ pub struct Scanner {
     start: usize,
     current: usize,
     line: usize,
-    pub error: bool,
+    errors: Vec<String>,
 }
 
 impl Scanner {
@@ -17,7 +17,7 @@ impl Scanner {
             start: 0,
             current: 0,
             line: 1,
-            error: false,
+            errors: Vec::new(),
         }
     }
 
@@ -56,10 +56,16 @@ impl Scanner {
             c if c.is_ascii_digit() => self.handle_number(),
             c if c.is_alphabetic() || c == '_' => self.handle_identifier(),
             _ => {
-                eprintln!("[line {}] Error: Unexpected character: {}", self.line, c);
-                self.error = true;
+                self.report_error(format!(
+                    "[line {}] Error: Unexpected character: {c}.",
+                    self.line
+                ));
             }
         };
+    }
+
+    fn report_error(&mut self, message: String) {
+        self.errors.push(message);
     }
 
     fn add_token(&mut self, token_type: TokenType) {
@@ -113,8 +119,7 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            eprintln!("[line {}] Error: Unterminated string.", self.line);
-            self.error = true;
+            self.report_error(format!("[line {}] Error: Unterminated string.", self.line));
             return;
         }
 
@@ -193,5 +198,9 @@ impl Scanner {
     fn advance(&mut self) -> char {
         self.current += 1;
         self.source[self.current - 1]
+    }
+
+    pub fn errors(&self) -> &[String] {
+        &self.errors
     }
 }

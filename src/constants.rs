@@ -4,8 +4,10 @@ pub const INIT_METHOD: &str = "init";
 
 pub mod errors {
     pub const OPERANDS_MUST_BE_NUMBERS: &str = "Operands must be numbers.";
-    pub const OPERANDS_MUST_BE_NUMBERS_OR_STRINGS: &str = "Operands must be numbers or strings.";
+    pub const OPERANDS_MUST_BE_NUMBERS_OR_STRINGS: &str =
+        "Operands must be two numbers or two strings.";
     pub const ONLY_INSTANCES_HAVE_FIELDS: &str = "Only instances have fields.";
+    pub const ONLY_INSTANCES_HAVE_PROPERTIES: &str = "Only instances have properties.";
     pub const RETURN_FROM_INITIALIZER: &str = "Can't return a value from an initializer.";
     pub const RETURN_FROM_TOP_LEVEL: &str = "Can't return from top-level code.";
     pub const THIS_OUTSIDE_CLASS: &str = "Can't use 'this' outside of a class.";
@@ -18,8 +20,8 @@ pub mod errors {
 }
 
 pub mod exit_codes {
-    pub const COMMAND_LINE_USAGE: i32 = 64;
-    pub const SYNTAX_ERROR: i32 = 65;
-    pub const CANNOT_OPEN_INPUT: i32 = 66;
-    pub const RUNTIME_ERROR: i32 = 70;
+    pub const COMMAND_LINE_USAGE: u8 = 64;
+    pub const SYNTAX_ERROR: u8 = 65;
+    pub const CANNOT_OPEN_INPUT: u8 = 66;
+    pub const RUNTIME_ERROR: u8 = 70;
 }

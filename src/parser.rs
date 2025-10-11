@@ -85,7 +85,7 @@ impl<'a> Parser<'a> {
                 if params.len() >= 255 {
                     return Err(Parser::error(
                         self.peek(),
-                        "Cannot have more than 255 parameters.",
+                        "Can't have more than 255 parameters.",
                     ));
                 }
                 params.push(
@@ -252,6 +252,7 @@ impl<'a> Parser<'a> {
             return Ok(expr);
         }
 
+        let equals = self.previous().clone();
         let value = self.expression()?;
         match expr {
             Expression::Variable { name, .. } => Ok(Expression::Assign {
@@ -264,7 +265,7 @@ impl<'a> Parser<'a> {
                 name,
                 value: Box::new(value),
             }),
-            _ => Err(Parser::error(self.previous(), "Invalid assignment target.")),
+            _ => Err(Parser::error(&equals, "Invalid assignment target.")),
         }
     }
 
@@ -358,7 +359,7 @@ impl<'a> Parser<'a> {
                 expression = self.finish_call(expression)?;
             } else if self.match_(&[TokenType::DOT]) {
                 let name = self
-                    .consume(&TokenType::IDENTIFIER, "Expect property name after '.'")?
+                    .consume(&TokenType::IDENTIFIER, "Expect property name after '.'.")?
                     .clone();
                 expression = Expression::Get {
                     object: Box::new(expression),
@@ -378,7 +379,7 @@ impl<'a> Parser<'a> {
                 if arguments.len() >= 255 {
                     return Err(Parser::error(
                         self.peek(),
-                        "Cannot have more than 255 arguments.",
+                        "Can't have more than 255 arguments.",
                     ));
                 }
                 arguments.push(self.expression()?);
@@ -480,6 +481,17 @@ impl<'a> Parser<'a> {
     }
 
     pub fn error(token: &Token, message: &str) -> LoxError {
-        LoxError::parser_error(token.line, &token.lexeme, message)
+        if token.token_type == TokenType::EOF {
+            LoxError::SyntaxErrorAtEnd {
+                line: token.line,
+                message: message.to_string(),
+            }
+        } else {
+            LoxError::SyntaxError {
+                line: token.line,
+                lexeme: token.lexeme.clone(),
+                message: message.to_string(),
+            }
+        }
     }
 }

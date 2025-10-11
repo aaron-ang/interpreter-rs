@@ -202,14 +202,14 @@ impl LoxInstance {
         }
     }
 
-    pub fn get(&self, name: &Token) -> InterpreterResult<Literal> {
-        if let Some(value) = self.fields.get(&name.lexeme) {
+    pub fn get(instance: &Rc<RefCell<Self>>, name: &Token) -> InterpreterResult<Literal> {
+        let borrowed = instance.borrow();
+        if let Some(value) = borrowed.fields.get(&name.lexeme) {
             return Ok(value.clone());
         }
 
-        if let Some(method) = self.klass.find_method(&name.lexeme) {
-            let instance = Rc::new(RefCell::new(self.clone()));
-            return Ok(Literal::Function(Rc::new(method.bind(instance)?)));
+        if let Some(method) = borrowed.klass.find_method(&name.lexeme) {
+            return Ok(Literal::Function(Rc::new(method.bind(instance.clone())?)));
         }
 
         Err(LoxError::UndefinedProperty(name.lexeme.clone()))
