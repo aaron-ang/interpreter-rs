@@ -11,7 +11,7 @@ use crate::{
     constants::{INIT_METHOD, THIS_KEYWORD},
     environment::Environment,
     error::LoxError,
-    grammar::{Function, Literal, Token},
+    grammar::{Function, Literal, RcStr, Token},
     interpreter::{Interpreter, InterpreterResult},
 };
 
@@ -27,29 +27,29 @@ pub trait LoxCallable: fmt::Debug {
 
 #[derive(Debug, Clone)]
 pub struct LoxFunction {
-    declaration: Function,
+    declaration: Rc<Function>,
     closure: Environment,
     is_initializer: bool,
 }
 
 impl LoxFunction {
-    pub fn new(fun: &Function, closure: &Environment, is_initializer: bool) -> Self {
+    pub fn new(fun: Rc<Function>, closure: &Environment, is_initializer: bool) -> Self {
         Self {
-            declaration: fun.clone(),
+            declaration: fun,
             closure: closure.clone(),
             is_initializer,
         }
     }
 
-    pub fn name(&self) -> String {
+    pub fn name(&self) -> RcStr {
         self.declaration.name.lexeme.clone()
     }
 
     pub fn bind(&self, instance: Rc<RefCell<LoxInstance>>) -> InterpreterResult<LoxFunction> {
         let env = Environment::new_enclosed(&self.closure);
-        env.define(THIS_KEYWORD, Literal::Instance(instance));
+        env.define(Rc::from(THIS_KEYWORD), Literal::Instance(instance));
         Ok(LoxFunction::new(
-            &self.declaration,
+            self.declaration.clone(),
             &env,
             self.is_initializer,
         ))
@@ -69,7 +69,7 @@ impl LoxCallable for LoxFunction {
         let env = Environment::new_enclosed(&self.closure);
         // Bind parameters to arguments
         for (param, arg) in self.declaration.params.iter().zip(arguments) {
-            env.define(&param.lexeme, arg.clone());
+            env.define(param.lexeme.clone(), arg.clone());
         }
         // Execute function body in the new environment
         let result = interpreter.execute_block(&self.declaration.body, env)?;
@@ -129,16 +129,16 @@ impl LoxCallable for Native {
 
 #[derive(Debug, Clone)]
 pub struct LoxClass {
-    pub name: String,
+    pub name: RcStr,
     superclass: Option<Rc<LoxClass>>,
-    methods: HashMap<String, Rc<LoxFunction>>,
+    methods: HashMap<RcStr, Rc<LoxFunction>>,
 }
 
 impl LoxClass {
     pub fn new(
-        name: String,
+        name: RcStr,
         superclass: Option<Rc<LoxClass>>,
-        methods: HashMap<String, Rc<LoxFunction>>,
+        methods: HashMap<RcStr, Rc<LoxFunction>>,
     ) -> Self {
         LoxClass {
             name,
@@ -184,14 +184,14 @@ impl LoxCallable for LoxClass {
     }
 
     fn to_string(&self) -> String {
-        self.name.clone()
+        self.name.to_string()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct LoxInstance {
     klass: LoxClass,
-    fields: HashMap<String, Literal>,
+    fields: HashMap<RcStr, Literal>,
 }
 
 impl LoxInstance {
@@ -204,7 +204,7 @@ impl LoxInstance {
 
     pub fn get(instance: &Rc<RefCell<Self>>, name: &Token) -> InterpreterResult<Literal> {
         let borrowed = instance.borrow();
-        if let Some(value) = borrowed.fields.get(&name.lexeme) {
+        if let Some(value) = borrowed.fields.get(&*name.lexeme) {
             return Ok(value.clone());
         }
 
@@ -212,7 +212,7 @@ impl LoxInstance {
             return Ok(Literal::Function(Rc::new(method.bind(instance.clone())?)));
         }
 
-        Err(LoxError::UndefinedProperty(name.lexeme.clone()))
+        Err(LoxError::UndefinedProperty(name.lexeme.to_string()))
     }
 
     pub fn set(&mut self, name: &Token, value: Literal) {

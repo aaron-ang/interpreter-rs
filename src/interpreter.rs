@@ -28,7 +28,7 @@ impl Default for Interpreter {
 impl Interpreter {
     pub fn new() -> Self {
         let environment = Environment::new();
-        environment.define("clock", Literal::Function(Native::clock()));
+        environment.define(Rc::from("clock"), Literal::Function(Native::clock()));
 
         Interpreter {
             globals: environment.clone(),
@@ -80,20 +80,23 @@ impl Interpreter {
                     None
                 };
 
-                self.environment.define(&name.lexeme, Literal::Nil);
+                self.environment.define(name.lexeme.clone(), Literal::Nil);
 
                 if let Some(ref superclass) = superclass {
                     self.environment = Environment::new_enclosed(&self.environment);
                     self.environment
-                        .define(SUPER_KEYWORD, Literal::Class(superclass.clone()));
+                        .define(Rc::from(SUPER_KEYWORD), Literal::Class(superclass.clone()));
                 }
 
                 let methods = methods
                     .iter()
                     .map(|method| {
-                        let is_initializer = method.name.lexeme == INIT_METHOD;
-                        let function =
-                            Rc::new(LoxFunction::new(method, &self.environment, is_initializer));
+                        let is_initializer = method.name.lexeme.as_ref() == INIT_METHOD;
+                        let function = Rc::new(LoxFunction::new(
+                            method.clone(),
+                            &self.environment,
+                            is_initializer,
+                        ));
                         (method.name.lexeme.clone(), function)
                     })
                     .collect();
@@ -143,7 +146,7 @@ impl Interpreter {
                 } else {
                     Literal::Nil
                 };
-                self.environment.define(&name.lexeme, value);
+                self.environment.define(name.lexeme.clone(), value);
                 Ok(ControlFlow::Continue(()))
             }
             Statement::While { condition, body } => {
@@ -155,10 +158,10 @@ impl Interpreter {
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Function(fun) => {
-                let fun = LoxFunction::new(fun, &self.environment, false);
-                let name = fun.name();
+                let name = fun.name.lexeme.clone();
+                let fun = LoxFunction::new(fun.clone(), &self.environment, false);
                 self.environment
-                    .define(&name, Literal::Function(Rc::new(fun)));
+                    .define(name, Literal::Function(Rc::new(fun)));
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Return { value, .. } => {
@@ -215,7 +218,10 @@ impl Interpreter {
                     TokenType::PLUS => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l + r),
                         (Literal::String(l), Literal::String(r)) => {
-                            Literal::String(format!("{l}{r}"))
+                            let mut s = String::with_capacity(l.len() + r.len());
+                            s.push_str(&l);
+                            s.push_str(&r);
+                            Literal::String(s.into())
                         }
                         _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS_OR_STRINGS)),
                     },

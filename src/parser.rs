@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use anyhow::Result;
 
 use crate::{
@@ -34,7 +36,7 @@ impl<'a> Parser<'a> {
         if self.match_(&[TokenType::CLASS]) {
             self.class_declaration()
         } else if self.match_(&[TokenType::FUN]) {
-            Ok(Statement::Function(self.function("function")?))
+            Ok(Statement::Function(Rc::new(self.function("function")?)))
         } else if self.match_(&[TokenType::VAR]) {
             self.variable()
         } else {
@@ -60,7 +62,7 @@ impl<'a> Parser<'a> {
         self.consume(&TokenType::LEFT_BRACE, "Expect '{' before class body.")?;
         let mut methods = vec![];
         while !self.check(&TokenType::RIGHT_BRACE) && !self.is_at_end() {
-            methods.push(self.function("method")?);
+            methods.push(Rc::new(self.function("method")?));
         }
         self.consume(&TokenType::RIGHT_BRACE, "Expect '}' after class body.")?;
 
@@ -489,7 +491,7 @@ impl<'a> Parser<'a> {
         } else {
             LoxError::SyntaxError {
                 line: token.line,
-                lexeme: token.lexeme.clone(),
+                lexeme: token.lexeme.to_string(),
                 message: message.to_string(),
             }
         }

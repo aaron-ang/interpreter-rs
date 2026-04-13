@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 use crate::{
     error::LoxError,
-    grammar::{Literal, Token},
+    grammar::{Literal, RcStr, Token},
     interpreter::InterpreterResult,
 };
 
@@ -35,7 +35,7 @@ impl Environment {
         }
     }
 
-    pub fn define(&self, name: &str, value: Literal) {
+    pub fn define(&self, name: RcStr, value: Literal) {
         self.inner.borrow_mut().define(name, value);
     }
 
@@ -78,7 +78,7 @@ impl Environment {
 /// Contains the actual environment implementation and references to parent environments
 #[derive(Debug)]
 struct EnvironmentImpl {
-    values: HashMap<String, Literal>,
+    values: HashMap<RcStr, Literal>,
     parent: Option<Environment>,
 }
 
@@ -97,12 +97,12 @@ impl EnvironmentImpl {
         }
     }
 
-    fn define(&mut self, name: &str, value: Literal) {
-        self.values.insert(name.to_string(), value);
+    fn define(&mut self, name: RcStr, value: Literal) {
+        self.values.insert(name, value);
     }
 
     fn get(&self, token: &Token) -> InterpreterResult<Literal> {
-        if let Some(value) = self.values.get(&token.lexeme) {
+        if let Some(value) = self.values.get(&*token.lexeme) {
             return Ok(value.clone());
         }
 
@@ -111,7 +111,7 @@ impl EnvironmentImpl {
         }
 
         Err(LoxError::UndefinedVariable {
-            name: token.lexeme.clone(),
+            name: token.lexeme.to_string(),
             line: token.line,
         })
     }
@@ -121,7 +121,7 @@ impl EnvironmentImpl {
     }
 
     fn assign(&mut self, token: &Token, value: &Literal) -> InterpreterResult<()> {
-        if self.values.contains_key(&token.lexeme) {
+        if self.values.contains_key(&*token.lexeme) {
             self.assign_to_local(&token.lexeme, value);
             return Ok(());
         }
@@ -131,13 +131,13 @@ impl EnvironmentImpl {
         }
 
         Err(LoxError::UndefinedVariable {
-            name: token.lexeme.clone(),
+            name: token.lexeme.to_string(),
             line: token.line,
         })
     }
 
     fn assign_to_local(&mut self, name: &str, value: &Literal) {
-        self.values.insert(name.to_string(), value.clone());
+        self.values.insert(Rc::from(name), value.clone());
     }
 }
 

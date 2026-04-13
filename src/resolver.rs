@@ -1,10 +1,12 @@
-use anyhow::Result;
 use std::collections::HashMap;
+use std::rc::Rc;
+
+use anyhow::Result;
 
 use crate::{
     constants::{errors::*, INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD},
     error::LoxError,
-    grammar::{Expression, Function, Statement, Token},
+    grammar::{Expression, Function, RcStr, Statement, Token},
     interpreter::Interpreter,
 };
 
@@ -27,7 +29,7 @@ enum ClassType {
 
 pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
-    scopes: Vec<HashMap<String, bool>>,
+    scopes: Vec<HashMap<RcStr, bool>>,
     current_function: FunctionType,
     current_class: ClassType,
 }
@@ -52,7 +54,7 @@ impl<'a> Resolver<'a> {
 
     fn declare(&mut self, name: &Token) -> ResolverResult<()> {
         if let Some(scope) = self.scopes.last_mut() {
-            if scope.contains_key(&name.lexeme) {
+            if scope.contains_key(&*name.lexeme) {
                 return Err(self.error(name, DUPLICATE_VARIABLE));
             }
             scope.insert(name.lexeme.clone(), false);
@@ -103,7 +105,7 @@ impl<'a> Resolver<'a> {
                             self.scopes
                                 .last_mut()
                                 .unwrap()
-                                .insert(SUPER_KEYWORD.to_string(), true);
+                                .insert(Rc::from(SUPER_KEYWORD), true);
                         }
                         _ => unreachable!("Superclass should be a variable"),
                     }
@@ -112,12 +114,12 @@ impl<'a> Resolver<'a> {
                 // Set up scope for methods with "this" defined
                 self.begin_scope();
                 if let Some(scope) = self.scopes.last_mut() {
-                    scope.insert(THIS_KEYWORD.to_string(), true);
+                    scope.insert(Rc::from(THIS_KEYWORD), true);
                 }
 
                 // Resolve each method
                 for method in methods {
-                    let function_type = if method.name.lexeme == INIT_METHOD {
+                    let function_type = if method.name.lexeme.as_ref() == INIT_METHOD {
                         FunctionType::Initializer
                     } else {
                         FunctionType::Method
@@ -183,7 +185,7 @@ impl<'a> Resolver<'a> {
         match expr {
             Expression::Variable { id, name } => {
                 if let Some(scope) = self.scopes.last() {
-                    if let Some(false) = scope.get(&name.lexeme) {
+                    if let Some(false) = scope.get(&*name.lexeme) {
                         return Err(self.error(name, VARIABLE_IN_OWN_INITIALIZER));
                     }
                 }
@@ -241,7 +243,7 @@ impl<'a> Resolver<'a> {
 
     fn resolve_local(&mut self, exp_id: usize, name: &Token) {
         for (depth, scope) in self.scopes.iter().rev().enumerate() {
-            if scope.contains_key(&name.lexeme) {
+            if scope.contains_key(&*name.lexeme) {
                 self.interpreter.resolve(exp_id, depth);
                 return;
             }
@@ -267,7 +269,7 @@ impl<'a> Resolver<'a> {
     fn error(&self, token: &Token, message: &str) -> LoxError {
         LoxError::SyntaxError {
             line: token.line,
-            lexeme: token.lexeme.clone(),
+            lexeme: token.lexeme.to_string(),
             message: message.to_string(),
         }
     }

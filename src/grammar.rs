@@ -2,6 +2,8 @@ use std::{cell::RefCell, fmt, rc::Rc};
 
 use crate::callable::{LoxCallable, LoxClass, LoxInstance};
 
+pub type RcStr = Rc<str>;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, strum::Display)]
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub enum TokenType {
@@ -78,7 +80,7 @@ impl TokenType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
-    pub lexeme: String,
+    pub lexeme: RcStr,
     pub literal: Option<Literal>,
     pub line: usize,
 }
@@ -97,7 +99,7 @@ impl fmt::Display for Token {
 pub enum Literal {
     Nil,
     Boolean(bool),
-    String(String),
+    String(RcStr),
     Number(f64),
     Function(Rc<dyn LoxCallable>),
     Class(Rc<LoxClass>),
@@ -131,24 +133,21 @@ impl PartialEq for Literal {
 
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let output = match self {
-            Literal::Boolean(b) => b.to_string(),
-            Literal::String(s) => s.to_string(),
+        match self {
+            Literal::Boolean(b) => write!(f, "{b}"),
+            Literal::String(s) => write!(f, "{s}"),
             Literal::Number(n) => {
                 if n.fract() == 0.0 {
-                    // integer
-                    format!("{:.1}", n)
+                    write!(f, "{n:.1}")
                 } else {
-                    // float
-                    n.to_string()
+                    write!(f, "{n}")
                 }
             }
-            Literal::Nil => "nil".to_string(),
-            Literal::Function(c) => c.to_string(),
-            Literal::Class(c) => c.to_string(),
-            Literal::Instance(c) => c.borrow().to_string(),
-        };
-        write!(f, "{output}")
+            Literal::Nil => write!(f, "nil"),
+            Literal::Function(c) => write!(f, "{}", c.to_string()),
+            Literal::Class(c) => write!(f, "{}", c.to_string()),
+            Literal::Instance(c) => write!(f, "{}", c.borrow().to_string()),
+        }
     }
 }
 
@@ -266,7 +265,7 @@ pub enum Statement {
     Class {
         name: Token,
         superclass: Option<Expression>,
-        methods: Vec<Function>,
+        methods: Vec<Rc<Function>>,
     },
     Expression(Expression),
     If {
@@ -283,7 +282,7 @@ pub enum Statement {
         condition: Expression,
         body: Box<Statement>,
     },
-    Function(Function),
+    Function(Rc<Function>),
     Return {
         keyword: Token,
         value: Option<Expression>,

@@ -1,7 +1,9 @@
-use crate::grammar::{Literal, Token, TokenType};
+use std::rc::Rc;
 
-pub struct Scanner {
-    source: Vec<char>,
+use crate::grammar::{Literal, RcStr, Token, TokenType};
+
+pub struct Scanner<'a> {
+    source: &'a [u8],
     tokens: Vec<Token>,
     start: usize,
     current: usize,
@@ -9,10 +11,10 @@ pub struct Scanner {
     errors: Vec<String>,
 }
 
-impl Scanner {
-    pub fn new(input: &str) -> Self {
+impl<'a> Scanner<'a> {
+    pub fn new(input: &'a str) -> Self {
         Scanner {
-            source: input.chars().collect(),
+            source: input.as_bytes(),
             tokens: vec![],
             start: 0,
             current: 0,
@@ -28,37 +30,37 @@ impl Scanner {
         }
         self.tokens.push(Token {
             token_type: TokenType::EOF,
-            lexeme: String::new(),
+            lexeme: Rc::from(""),
             literal: None,
             line: self.line,
         });
-        self.tokens.clone()
+        std::mem::take(&mut self.tokens)
     }
 
     fn scan_token(&mut self) {
         let c = self.advance();
         match c {
-            '(' => self.add_token(TokenType::LEFT_PAREN),
-            ')' => self.add_token(TokenType::RIGHT_PAREN),
-            '{' => self.add_token(TokenType::LEFT_BRACE),
-            '}' => self.add_token(TokenType::RIGHT_BRACE),
-            ',' => self.add_token(TokenType::COMMA),
-            '.' => self.add_token(TokenType::DOT),
-            '-' => self.add_token(TokenType::MINUS),
-            '+' => self.add_token(TokenType::PLUS),
-            ';' => self.add_token(TokenType::SEMICOLON),
-            '*' => self.add_token(TokenType::STAR),
-            '=' | '!' | '<' | '>' => self.handle_comparison(c),
-            '/' => self.handle_slash(),
-            ' ' | '\r' | '\t' => (),
-            '\n' => self.line += 1,
-            '"' => self.handle_string(),
+            b'(' => self.add_token(TokenType::LEFT_PAREN),
+            b')' => self.add_token(TokenType::RIGHT_PAREN),
+            b'{' => self.add_token(TokenType::LEFT_BRACE),
+            b'}' => self.add_token(TokenType::RIGHT_BRACE),
+            b',' => self.add_token(TokenType::COMMA),
+            b'.' => self.add_token(TokenType::DOT),
+            b'-' => self.add_token(TokenType::MINUS),
+            b'+' => self.add_token(TokenType::PLUS),
+            b';' => self.add_token(TokenType::SEMICOLON),
+            b'*' => self.add_token(TokenType::STAR),
+            b'=' | b'!' | b'<' | b'>' => self.handle_comparison(c),
+            b'/' => self.handle_slash(),
+            b' ' | b'\r' | b'\t' => (),
+            b'\n' => self.line += 1,
+            b'"' => self.handle_string(),
             c if c.is_ascii_digit() => self.handle_number(),
-            c if c.is_alphabetic() || c == '_' => self.handle_identifier(),
+            c if c.is_ascii_alphabetic() || c == b'_' => self.handle_identifier(),
             _ => {
                 self.report_error(format!(
-                    "[line {}] Error: Unexpected character: {c}.",
-                    self.line
+                    "[line {}] Error: Unexpected character: {}.",
+                    self.line, c as char
                 ));
             }
         };
@@ -81,15 +83,15 @@ impl Scanner {
         });
     }
 
-    fn handle_comparison(&mut self, c: char) {
+    fn handle_comparison(&mut self, c: u8) {
         let (single_char_token, double_char_token) = match c {
-            '=' => (TokenType::EQUAL, TokenType::EQUAL_EQUAL),
-            '!' => (TokenType::BANG, TokenType::BANG_EQUAL),
-            '<' => (TokenType::LESS, TokenType::LESS_EQUAL),
-            '>' => (TokenType::GREATER, TokenType::GREATER_EQUAL),
+            b'=' => (TokenType::EQUAL, TokenType::EQUAL_EQUAL),
+            b'!' => (TokenType::BANG, TokenType::BANG_EQUAL),
+            b'<' => (TokenType::LESS, TokenType::LESS_EQUAL),
+            b'>' => (TokenType::GREATER, TokenType::GREATER_EQUAL),
             _ => unreachable!(),
         };
-        if self.match_('=') {
+        if self.match_(b'=') {
             self.add_token(double_char_token);
         } else {
             self.add_token(single_char_token);
@@ -97,7 +99,7 @@ impl Scanner {
     }
 
     fn handle_slash(&mut self) {
-        if self.match_('/') {
+        if self.match_(b'/') {
             self.advance_end_of_line();
         } else {
             self.add_token(TokenType::SLASH);
@@ -105,14 +107,14 @@ impl Scanner {
     }
 
     fn advance_end_of_line(&mut self) {
-        while self.peek() != '\n' && !self.is_at_end() {
+        while self.peek() != b'\n' && !self.is_at_end() {
             self.advance();
         }
     }
 
     fn handle_string(&mut self) {
-        while self.peek() != '"' && !self.is_at_end() {
-            if self.peek() == '\n' {
+        while self.peek() != b'"' && !self.is_at_end() {
+            if self.peek() == b'\n' {
                 self.line += 1;
             }
             self.advance();
@@ -137,7 +139,7 @@ impl Scanner {
         }
 
         // Look for fractional part
-        if self.peek() == '.' && self.peek_next().is_ascii_digit() {
+        if self.peek() == b'.' && self.peek_next().is_ascii_digit() {
             // Consume the "."
             self.advance();
 
@@ -146,7 +148,8 @@ impl Scanner {
             }
         }
 
-        let number: f64 = self.substr(self.start, self.current).parse().unwrap();
+        let number_str = self.substr_str(self.start, self.current);
+        let number: f64 = number_str.parse().unwrap();
         self.add_token_with_literal(TokenType::NUMBER, Some(Literal::Number(number)));
     }
 
@@ -154,20 +157,26 @@ impl Scanner {
         while Self::is_identifier_char(self.peek()) {
             self.advance();
         }
-        let text = self.substr(self.start, self.current);
-        let token_type = TokenType::get_token_type(&text);
+        let text = self.substr_str(self.start, self.current);
+        let token_type = TokenType::get_token_type(text);
         self.add_token(token_type)
     }
 
-    fn is_identifier_char(c: char) -> bool {
-        c.is_alphanumeric() || c == '_'
+    fn is_identifier_char(c: u8) -> bool {
+        c.is_ascii_alphanumeric() || c == b'_'
     }
 
-    fn substr(&self, start: usize, end: usize) -> String {
-        self.source[start..end].iter().collect()
+    /// Returns an `Rc<str>` slice of the source — used for token lexemes and string literals.
+    fn substr(&self, start: usize, end: usize) -> RcStr {
+        Rc::from(self.substr_str(start, end))
     }
 
-    fn match_(&mut self, expected: char) -> bool {
+    /// Returns a `&str` slice of the source — used internally where Rc is not needed.
+    fn substr_str(&self, start: usize, end: usize) -> &str {
+        std::str::from_utf8(&self.source[start..end]).expect("valid UTF-8 source")
+    }
+
+    fn match_(&mut self, expected: u8) -> bool {
         let is_match = self.peek() == expected;
         if is_match {
             self.advance();
@@ -175,17 +184,17 @@ impl Scanner {
         is_match
     }
 
-    fn peek(&self) -> char {
+    fn peek(&self) -> u8 {
         if self.is_at_end() {
-            '\0'
+            b'\0'
         } else {
             self.source[self.current]
         }
     }
 
-    fn peek_next(&self) -> char {
+    fn peek_next(&self) -> u8 {
         if self.current + 1 >= self.source.len() {
-            '\0'
+            b'\0'
         } else {
             self.source[self.current + 1]
         }
@@ -195,7 +204,7 @@ impl Scanner {
         self.current >= self.source.len()
     }
 
-    fn advance(&mut self) -> char {
+    fn advance(&mut self) -> u8 {
         self.current += 1;
         self.source[self.current - 1]
     }
