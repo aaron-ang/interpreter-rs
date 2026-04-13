@@ -101,7 +101,7 @@ impl EnvironmentImpl {
     }
 
     fn get(&self, token: &Token) -> InterpreterResult<Literal> {
-        if let Some(value) = self.values.get(&*token.lexeme) {
+        if let Some(value) = self.values.get(token.lexeme.as_ref()) {
             return Ok(value.clone());
         }
 
@@ -120,7 +120,7 @@ impl EnvironmentImpl {
     }
 
     fn assign(&mut self, token: &Token, value: &Literal) -> InterpreterResult<()> {
-        if self.values.contains_key(&*token.lexeme) {
+        if self.values.contains_key(token.lexeme.as_ref()) {
             self.assign_to_local(&token.lexeme, value);
             return Ok(());
         }

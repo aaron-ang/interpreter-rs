@@ -200,7 +200,7 @@ impl LoxInstance {
 
     pub fn get(instance: &Rc<RefCell<Self>>, name: &Token) -> InterpreterResult<Literal> {
         let borrowed = instance.borrow();
-        if let Some(value) = borrowed.fields.get(&*name.lexeme) {
+        if let Some(value) = borrowed.fields.get(name.lexeme.as_ref()) {
             return Ok(value.clone());
         }
 

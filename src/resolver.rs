@@ -87,7 +87,7 @@ impl<'a> Resolver<'a> {
 
     fn declare(&mut self, name: &Token) -> ResolverResult<()> {
         if let Some(scope) = self.scopes.last_mut() {
-            if scope.contains_key(&*name.lexeme) {
+            if scope.contains_key(name.lexeme.as_ref()) {
                 return Err(Self::error(name, DUPLICATE_VARIABLE));
             }
             scope.insert(name.lexeme.clone(), false);
@@ -208,7 +208,7 @@ impl<'a> Resolver<'a> {
         match expr {
             Expression::Variable { id, name } => {
                 if let Some(scope) = self.scopes.last() {
-                    if let Some(false) = scope.get(&*name.lexeme) {
+                    if let Some(false) = scope.get(name.lexeme.as_ref()) {
                         return Err(Self::error(name, VARIABLE_IN_OWN_INITIALIZER));
                     }
                 }
@@ -263,7 +263,7 @@ impl<'a> Resolver<'a> {
 
     fn resolve_local(&mut self, exp_id: usize, name: &Token) {
         for (depth, scope) in self.scopes.iter().rev().enumerate() {
-            if scope.contains_key(&*name.lexeme) {
+            if scope.contains_key(name.lexeme.as_ref()) {
                 self.interpreter.resolve(exp_id, depth);
                 return;
             }
