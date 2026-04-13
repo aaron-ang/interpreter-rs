@@ -22,6 +22,8 @@ pub mod test_support {
 
     use crate::{cli_run, CliMode};
 
+    /// # Panics
+    /// Panics if the test file cannot be read or if the output does not match expectations.
     pub fn run_lox_test(path: &str) {
         let source = fs::read_to_string(path).expect("read test file");
         let mode = if path.contains("/scanning/") {
@@ -70,7 +72,7 @@ pub mod test_support {
             .lines()
             .filter(|line| {
                 let trimmed = line.trim();
-                !(trimmed.starts_with("[line ") && trimmed.ends_with("]"))
+                !(trimmed.starts_with("[line ") && trimmed.ends_with(']'))
             })
             .collect::<Vec<_>>();
 

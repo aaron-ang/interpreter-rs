@@ -47,16 +47,15 @@ impl Environment {
         self.inner.borrow_mut().assign(token, value)
     }
 
-    pub fn get_at(&self, distance: usize, name: &str) -> InterpreterResult<Literal> {
+    pub fn get_at(&self, distance: usize, name: &str) -> Literal {
         self.ancestor(distance).inner.borrow().get_from_local(name)
     }
 
-    pub fn assign_at(&self, distance: usize, name: &str, value: &Literal) -> InterpreterResult<()> {
+    pub fn assign_at(&self, distance: usize, name: &str, value: &Literal) {
         self.ancestor(distance)
             .inner
             .borrow_mut()
             .assign_to_local(name, value);
-        Ok(())
     }
 
     pub fn ancestor(&self, distance: usize) -> Environment {
@@ -116,8 +115,8 @@ impl EnvironmentImpl {
         })
     }
 
-    fn get_from_local(&self, name: &str) -> InterpreterResult<Literal> {
-        Ok(self.values.get(name).cloned().unwrap_or(Literal::Nil))
+    fn get_from_local(&self, name: &str) -> Literal {
+        self.values.get(name).cloned().unwrap_or(Literal::Nil)
     }
 
     fn assign(&mut self, token: &Token, value: &Literal) -> InterpreterResult<()> {
@@ -147,7 +146,7 @@ impl fmt::Display for Environment {
         write!(f, "{:?}", env.values)?;
 
         if let Some(ref parent) = env.parent {
-            write!(f, " -> {:?}", parent)?;
+            write!(f, " -> {parent:?}")?;
         }
 
         Ok(())

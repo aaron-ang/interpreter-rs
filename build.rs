@@ -1,5 +1,6 @@
 use std::{
     env,
+    fmt::Write as _,
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
@@ -49,16 +50,17 @@ fn main() {
     for file in files {
         let rel = file.strip_prefix(&manifest_dir).unwrap_or(&file);
         let rel_str = rel.to_string_lossy();
-        let fn_name = fn_name_for(&rel);
+        let fn_name = fn_name_for(rel);
         let ignore = if rel_str.contains("/benchmark/") || rel_str.contains("/limit/") {
             "\n#[ignore]"
         } else {
             ""
         };
-        out.push_str(&format!(
+        let _ = write!(
+            out,
             "{ignore}\n#[test]\nfn {fn_name}() {{ crate::test_support::run_lox_test(\"{rel_str}\"); }}\n"
-        ));
-        println!("cargo:rerun-if-changed={}", rel_str);
+        );
+        println!("cargo:rerun-if-changed={rel_str}");
     }
 
     let out_file = out_dir.join("lox_generated_tests.rs");

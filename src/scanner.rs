@@ -12,6 +12,7 @@ pub struct Scanner<'a> {
 }
 
 impl<'a> Scanner<'a> {
+    #[must_use]
     pub fn new(input: &'a str) -> Self {
         Scanner {
             source: input.as_bytes(),
@@ -29,7 +30,7 @@ impl<'a> Scanner<'a> {
             self.scan_token();
         }
         self.tokens.push(Token {
-            token_type: TokenType::EOF,
+            type_: TokenType::EOF,
             lexeme: Rc::from(""),
             literal: None,
             line: self.line,
@@ -63,7 +64,7 @@ impl<'a> Scanner<'a> {
                     self.line, c as char
                 ));
             }
-        };
+        }
     }
 
     fn report_error(&mut self, message: String) {
@@ -76,7 +77,7 @@ impl<'a> Scanner<'a> {
 
     fn add_token_with_literal(&mut self, token_type: TokenType, literal: Option<Literal>) {
         self.tokens.push(Token {
-            token_type,
+            type_: token_type,
             lexeme: self.substr(self.start, self.current),
             literal,
             line: self.line,
@@ -130,7 +131,7 @@ impl<'a> Scanner<'a> {
 
         // Trim the surrounding quotes
         let literal = self.substr(self.start + 1, self.current - 1);
-        self.add_token_with_literal(TokenType::STRING, Some(Literal::String(literal)))
+        self.add_token_with_literal(TokenType::STRING, Some(Literal::String(literal)));
     }
 
     fn handle_number(&mut self) {
@@ -159,7 +160,7 @@ impl<'a> Scanner<'a> {
         }
         let text = self.substr_str(self.start, self.current);
         let token_type = TokenType::get_token_type(text);
-        self.add_token(token_type)
+        self.add_token(token_type);
     }
 
     fn is_identifier_char(c: u8) -> bool {
@@ -209,6 +210,7 @@ impl<'a> Scanner<'a> {
         self.source[self.current - 1]
     }
 
+    #[must_use]
     pub fn errors(&self) -> &[String] {
         &self.errors
     }

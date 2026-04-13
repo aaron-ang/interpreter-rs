@@ -45,14 +45,10 @@ impl LoxFunction {
         self.declaration.name.lexeme.clone()
     }
 
-    pub fn bind(&self, instance: Rc<RefCell<LoxInstance>>) -> InterpreterResult<LoxFunction> {
+    pub fn bind(&self, instance: Rc<RefCell<LoxInstance>>) -> LoxFunction {
         let env = Environment::new_enclosed(&self.closure);
         env.define(Rc::from(THIS_KEYWORD), Literal::Instance(instance));
-        Ok(LoxFunction::new(
-            self.declaration.clone(),
-            &env,
-            self.is_initializer,
-        ))
+        LoxFunction::new(self.declaration.clone(), &env, self.is_initializer)
     }
 }
 
@@ -75,12 +71,12 @@ impl LoxCallable for LoxFunction {
         let result = interpreter.execute_block(&self.declaration.body, env)?;
 
         if self.is_initializer {
-            return self.closure.get_at(0, THIS_KEYWORD);
+            return Ok(self.closure.get_at(0, THIS_KEYWORD));
         }
 
         match result {
             ControlFlow::Break(value) => Ok(value),
-            _ => Ok(Literal::Nil),
+            ControlFlow::Continue(()) => Ok(Literal::Nil),
         }
     }
 
@@ -177,7 +173,7 @@ impl LoxCallable for LoxClass {
         let rc_instance = Rc::new(RefCell::new(instance));
         if let Some(initializer) = self.find_method(INIT_METHOD) {
             initializer
-                .bind(rc_instance.clone())?
+                .bind(rc_instance.clone())
                 .call(interpreter, arguments)?;
         }
         Ok(Literal::Instance(rc_instance))
@@ -209,7 +205,7 @@ impl LoxInstance {
         }
 
         if let Some(method) = borrowed.klass.find_method(&name.lexeme) {
-            return Ok(Literal::Function(Rc::new(method.bind(instance.clone())?)));
+            return Ok(Literal::Function(Rc::new(method.bind(instance.clone()))));
         }
 
         Err(LoxError::UndefinedProperty(name.lexeme.to_string()))

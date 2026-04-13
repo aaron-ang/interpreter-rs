@@ -16,6 +16,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    #[must_use]
     pub fn new(tokens: &'a [Token]) -> Self {
         Parser {
             tokens,
@@ -24,6 +25,8 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// # Errors
+    /// Returns a syntax error if the token stream contains invalid grammar.
     pub fn parse(&mut self) -> Result<Vec<Statement>> {
         let mut statements = vec![];
         while !self.is_at_end() {
@@ -165,18 +168,18 @@ impl<'a> Parser<'a> {
         };
 
         // Get the condition
-        let condition = if !self.check(&TokenType::SEMICOLON) {
-            self.expression()?
-        } else {
+        let condition = if self.check(&TokenType::SEMICOLON) {
             Expression::Literal(Literal::Boolean(true))
+        } else {
+            self.expression()?
         };
         self.consume(&TokenType::SEMICOLON, "Expect ';' after loop condition.")?;
 
         // Get the increment
-        let increment = if !self.check(&TokenType::RIGHT_PAREN) {
-            Some(self.expression()?)
-        } else {
+        let increment = if self.check(&TokenType::RIGHT_PAREN) {
             None
+        } else {
+            Some(self.expression()?)
         };
         self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after for clauses.")?;
 
@@ -222,10 +225,10 @@ impl<'a> Parser<'a> {
 
     fn return_statement(&mut self) -> ParserResult<Statement> {
         let keyword = self.previous().clone();
-        let value = if !self.check(&TokenType::SEMICOLON) {
-            Some(self.expression()?)
-        } else {
+        let value = if self.check(&TokenType::SEMICOLON) {
             None
+        } else {
+            Some(self.expression()?)
         };
         self.consume(&TokenType::SEMICOLON, "Expect ';' after return value.")?;
         Ok(Statement::Return { keyword, value })
@@ -248,6 +251,8 @@ impl<'a> Parser<'a> {
         Ok(statements)
     }
 
+    /// # Errors
+    /// Returns a syntax error if the token stream does not form a valid expression.
     pub fn expression(&mut self) -> ParserResult<Expression> {
         let expr = self.logic_or()?;
         if !self.match_(&[TokenType::EQUAL]) {
@@ -454,7 +459,7 @@ impl<'a> Parser<'a> {
     }
 
     fn check(&self, token_type: &TokenType) -> bool {
-        !self.is_at_end() && self.peek().token_type == *token_type
+        !self.is_at_end() && self.peek().type_ == *token_type
     }
 
     fn advance(&mut self) -> &Token {
@@ -465,7 +470,7 @@ impl<'a> Parser<'a> {
     }
 
     fn is_at_end(&self) -> bool {
-        self.peek().token_type == TokenType::EOF
+        self.peek().type_ == TokenType::EOF
     }
 
     fn peek(&self) -> &Token {
@@ -482,8 +487,9 @@ impl<'a> Parser<'a> {
         id
     }
 
+    #[must_use]
     pub fn error(token: &Token, message: &str) -> LoxError {
-        if token.token_type == TokenType::EOF {
+        if token.type_ == TokenType::EOF {
             LoxError::SyntaxErrorAtEnd {
                 line: token.line,
                 message: message.to_string(),

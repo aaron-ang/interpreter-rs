@@ -14,7 +14,7 @@ pub enum Mode {
 }
 
 fn write_err(err: &mut dyn Write, msg: &str) {
-    let _ = writeln!(err, "{}", msg);
+    let _ = writeln!(err, "{msg}");
 }
 
 pub fn run(mode: Mode, input: &str, out: &mut dyn Write, err: &mut dyn Write) -> u8 {
@@ -22,12 +22,12 @@ pub fn run(mode: Mode, input: &str, out: &mut dyn Write, err: &mut dyn Write) ->
     let tokens = scanner.scan_tokens();
 
     for e in scanner.errors() {
-        let _ = writeln!(err, "{}", e);
+        let _ = writeln!(err, "{e}");
     }
 
     if let Mode::Tokenize = mode {
         for token in tokens {
-            let _ = writeln!(out, "{}", token);
+            let _ = writeln!(out, "{token}");
         }
         return if scanner.errors().is_empty() {
             0
@@ -41,7 +41,7 @@ pub fn run(mode: Mode, input: &str, out: &mut dyn Write, err: &mut dyn Write) ->
             let mut parser = Parser::new(&tokens);
             match parser.expression() {
                 Ok(expr) => {
-                    let _ = writeln!(out, "{}", expr);
+                    let _ = writeln!(out, "{expr}");
                     0
                 }
                 Err(e) => {
@@ -65,10 +65,10 @@ pub fn run(mode: Mode, input: &str, out: &mut dyn Write, err: &mut dyn Write) ->
                     let _ = out.write_all(&interpreter.drain_output());
                     match value {
                         Literal::Number(n) => {
-                            let _ = writeln!(out, "{}", n);
+                            let _ = writeln!(out, "{n}");
                         }
                         v => {
-                            let _ = writeln!(out, "{}", v);
+                            let _ = writeln!(out, "{v}");
                         }
                     }
                     0
@@ -106,6 +106,6 @@ pub fn run(mode: Mode, input: &str, out: &mut dyn Write, err: &mut dyn Write) ->
                 }
             }
         }
-        Mode::Tokenize => unreachable!(), // Not needed due to early return
+        Mode::Tokenize => unreachable!(),
     }
 }

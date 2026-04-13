@@ -1,10 +1,15 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use anyhow::Result;
-
 use crate::{
-    constants::{errors::*, INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD},
+    constants::{
+        errors::{
+            CLASS_INHERIT_SELF, DUPLICATE_VARIABLE, RETURN_FROM_INITIALIZER, RETURN_FROM_TOP_LEVEL,
+            SUPER_OUTSIDE_CLASS, SUPER_WITHOUT_SUPERCLASS, THIS_OUTSIDE_CLASS,
+            VARIABLE_IN_OWN_INITIALIZER,
+        },
+        INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD,
+    },
     error::LoxError,
     grammar::{Expression, Function, RcStr, Statement, Token},
     interpreter::Interpreter,
@@ -55,7 +60,7 @@ impl<'a> Resolver<'a> {
     fn declare(&mut self, name: &Token) -> ResolverResult<()> {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&*name.lexeme) {
-                return Err(self.error(name, DUPLICATE_VARIABLE));
+                return Err(Self::error(name, DUPLICATE_VARIABLE));
             }
             scope.insert(name.lexeme.clone(), false);
         }
@@ -68,6 +73,9 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// # Errors
+    /// Returns a syntax error on invalid variable usage (e.g. reading a variable in its own
+    /// initializer, duplicate declarations, or misuse of `this`/`super`/`return`).
     pub fn resolve(&mut self, statements: &[Statement]) -> ResolverResult<()> {
         for statement in statements {
             self.resolve_statement(statement)?;
@@ -97,7 +105,7 @@ impl<'a> Resolver<'a> {
                     match superclass {
                         Expression::Variable { name: sup_name, .. } => {
                             if name.lexeme == sup_name.lexeme {
-                                return Err(self.error(name, CLASS_INHERIT_SELF));
+                                return Err(Self::error(name, CLASS_INHERIT_SELF));
                             }
                             self.current_class = ClassType::Subclass;
                             self.resolve_expression(superclass)?;
@@ -145,7 +153,7 @@ impl<'a> Resolver<'a> {
                 self.define(&fun.name);
                 self.resolve_function(fun, FunctionType::Function)?;
             }
-            Statement::Expression(expr) => {
+            Statement::Expression(expr) | Statement::Print(expr) => {
                 self.resolve_expression(expr)?;
             }
             Statement::If {
@@ -159,16 +167,13 @@ impl<'a> Resolver<'a> {
                     self.resolve_statement(else_branch)?;
                 }
             }
-            Statement::Print(expr) => {
-                self.resolve_expression(expr)?;
-            }
             Statement::Return { keyword, value } => {
                 if self.current_function == FunctionType::None {
-                    return Err(self.error(keyword, RETURN_FROM_TOP_LEVEL));
+                    return Err(Self::error(keyword, RETURN_FROM_TOP_LEVEL));
                 }
                 if let Some(value) = value {
                     if self.current_function == FunctionType::Initializer {
-                        return Err(self.error(keyword, RETURN_FROM_INITIALIZER));
+                        return Err(Self::error(keyword, RETURN_FROM_INITIALIZER));
                     }
                     self.resolve_expression(value)?;
                 }
@@ -186,7 +191,7 @@ impl<'a> Resolver<'a> {
             Expression::Variable { id, name } => {
                 if let Some(scope) = self.scopes.last() {
                     if let Some(false) = scope.get(&*name.lexeme) {
-                        return Err(self.error(name, VARIABLE_IN_OWN_INITIALIZER));
+                        return Err(Self::error(name, VARIABLE_IN_OWN_INITIALIZER));
                     }
                 }
                 self.resolve_local(*id, name);
@@ -195,7 +200,8 @@ impl<'a> Resolver<'a> {
                 self.resolve_expression(value)?;
                 self.resolve_local(*id, name);
             }
-            Expression::Binary { left, right, .. } => {
+            Expression::Binary { left, right, .. }
+            | Expression::Logical { left, right, .. } => {
                 self.resolve_expression(left)?;
                 self.resolve_expression(right)?;
             }
@@ -209,10 +215,6 @@ impl<'a> Resolver<'a> {
                 self.resolve_expression(expr)?;
             }
             Expression::Literal(_) => {}
-            Expression::Logical { left, right, .. } => {
-                self.resolve_expression(left)?;
-                self.resolve_expression(right)?;
-            }
             Expression::Unary { right, .. } => {
                 self.resolve_expression(right)?;
             }
@@ -225,15 +227,15 @@ impl<'a> Resolver<'a> {
             }
             Expression::This { id, keyword } => {
                 if self.current_class == ClassType::None {
-                    return Err(self.error(keyword, THIS_OUTSIDE_CLASS));
+                    return Err(Self::error(keyword, THIS_OUTSIDE_CLASS));
                 }
                 self.resolve_local(*id, keyword);
             }
             Expression::Super { id, keyword, .. } => {
                 if self.current_class == ClassType::None {
-                    return Err(self.error(keyword, SUPER_OUTSIDE_CLASS));
+                    return Err(Self::error(keyword, SUPER_OUTSIDE_CLASS));
                 } else if self.current_class != ClassType::Subclass {
-                    return Err(self.error(keyword, SUPER_WITHOUT_SUPERCLASS));
+                    return Err(Self::error(keyword, SUPER_WITHOUT_SUPERCLASS));
                 }
                 self.resolve_local(*id, keyword);
             }
@@ -266,7 +268,7 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    fn error(&self, token: &Token, message: &str) -> LoxError {
+    fn error(token: &Token, message: &str) -> LoxError {
         LoxError::SyntaxError {
             line: token.line,
             lexeme: token.lexeme.to_string(),

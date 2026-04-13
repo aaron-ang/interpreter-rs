@@ -4,7 +4,13 @@ use anyhow::Result;
 
 use crate::{
     callable::{LoxClass, LoxFunction, LoxInstance, Native},
-    constants::{errors::*, INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD},
+    constants::{
+        errors::{
+            ONLY_INSTANCES_HAVE_FIELDS, ONLY_INSTANCES_HAVE_PROPERTIES, OPERANDS_MUST_BE_NUMBERS,
+            OPERANDS_MUST_BE_NUMBERS_OR_STRINGS,
+        },
+        INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD,
+    },
     environment::Environment,
     error::LoxError,
     grammar::{Expression, Literal, Statement, Token, TokenType},
@@ -26,6 +32,7 @@ impl Default for Interpreter {
 }
 
 impl Interpreter {
+    #[must_use]
     pub fn new() -> Self {
         let environment = Environment::new();
         environment.define(Rc::from("clock"), Literal::Function(Native::clock()));
@@ -38,12 +45,14 @@ impl Interpreter {
         }
     }
 
+    #[must_use]
     pub fn new_with_buffer() -> Self {
         let mut i = Self::new();
         i.output = Some(Rc::new(RefCell::new(Vec::new())));
         i
     }
 
+    #[must_use]
     pub fn drain_output(&self) -> Vec<u8> {
         match &self.output {
             Some(buf) => std::mem::take(&mut *buf.borrow_mut()),
@@ -51,8 +60,10 @@ impl Interpreter {
         }
     }
 
+    /// # Errors
+    /// Returns a runtime error if any statement fails to execute.
     pub fn interpret(&mut self, statements: &[Statement]) -> Result<Literal> {
-        for statement in statements.iter() {
+        for statement in statements {
             if let ControlFlow::Break(rv) = self.execute(statement)? {
                 return Ok(rv);
             }
@@ -60,6 +71,9 @@ impl Interpreter {
         Ok(Literal::Nil)
     }
 
+    /// # Errors
+    /// Returns a runtime error on type mismatches, undefined variables, or invalid operations.
+    #[allow(clippy::too_many_lines)]
     pub fn execute(&mut self, statement: &Statement) -> InterpreterResult<ControlFlow<Literal>> {
         match statement {
             Statement::Block(statements) => {
@@ -74,7 +88,7 @@ impl Interpreter {
                 let superclass = if let Some(expr) = superclass {
                     match self.evaluate(expr)? {
                         Literal::Class(class) => Some(class),
-                        _ => return Err(self.type_error("Superclass must be a class.")),
+                        _ => return Err(Self::type_error("Superclass must be a class.")),
                     }
                 } else {
                     None
@@ -175,6 +189,8 @@ impl Interpreter {
         }
     }
 
+    /// # Errors
+    /// Returns a runtime error if any statement in the block fails.
     pub fn execute_block(
         &mut self,
         statements: &[Statement],
@@ -191,13 +207,18 @@ impl Interpreter {
         Ok(ControlFlow::Continue(()))
     }
 
+    /// # Errors
+    /// Returns a runtime error on type mismatches, undefined variables, or invalid operations.
+    ///
+    /// # Panics
+    /// Panics if a `super` expression was not resolved during the resolution pass.
+    #[allow(clippy::too_many_lines)]
     pub fn evaluate(&mut self, expr: &Expression) -> InterpreterResult<Literal> {
         let literal = match expr {
             Expression::Assign { id, name, value } => {
                 let value = self.evaluate(value)?;
                 if let Some(distance) = self.locals.get(id) {
-                    self.environment
-                        .assign_at(*distance, &name.lexeme, &value)?;
+                    self.environment.assign_at(*distance, &name.lexeme, &value);
                 } else {
                     self.globals.assign(name, &value)?;
                 }
@@ -206,14 +227,14 @@ impl Interpreter {
             Expression::Binary { left, op, right } => {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
-                match op.token_type {
+                match op.type_ {
                     TokenType::STAR => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l * r),
-                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS)),
+                        _ => return Err(Self::type_error(OPERANDS_MUST_BE_NUMBERS)),
                     },
                     TokenType::SLASH => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l / r),
-                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS)),
+                        _ => return Err(Self::type_error(OPERANDS_MUST_BE_NUMBERS)),
                     },
                     TokenType::PLUS => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l + r),
@@ -223,20 +244,20 @@ impl Interpreter {
                             s.push_str(&r);
                             Literal::String(s.into())
                         }
-                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS_OR_STRINGS)),
+                        _ => return Err(Self::type_error(OPERANDS_MUST_BE_NUMBERS_OR_STRINGS)),
                     },
                     TokenType::MINUS => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l - r),
-                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS)),
+                        _ => return Err(Self::type_error(OPERANDS_MUST_BE_NUMBERS)),
                     },
                     TokenType::LESS
                     | TokenType::LESS_EQUAL
                     | TokenType::GREATER
                     | TokenType::GREATER_EQUAL => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => {
-                            Literal::Boolean(compare_number(&op.token_type, l, r))
+                            Literal::Boolean(compare_number(&op.type_, l, r))
                         }
-                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS)),
+                        _ => return Err(Self::type_error(OPERANDS_MUST_BE_NUMBERS)),
                     },
                     TokenType::EQUAL_EQUAL => Literal::Boolean(left == right),
                     TokenType::BANG_EQUAL => Literal::Boolean(left != right),
@@ -252,7 +273,7 @@ impl Interpreter {
                 let callee = match callee {
                     Literal::Function(fun) => fun,
                     Literal::Class(klass) => klass,
-                    _ => return Err(self.type_error("Can only call functions and classes.")),
+                    _ => return Err(Self::type_error("Can only call functions and classes.")),
                 };
                 if args.len() != callee.arity() {
                     return Err(LoxError::ArgumentCountError {
@@ -266,7 +287,7 @@ impl Interpreter {
                 let object = self.evaluate(object)?;
                 match object {
                     Literal::Instance(instance) => LoxInstance::get(&instance, name)?,
-                    _ => return Err(self.type_error(ONLY_INSTANCES_HAVE_PROPERTIES)),
+                    _ => return Err(Self::type_error(ONLY_INSTANCES_HAVE_PROPERTIES)),
                 }
             }
             Expression::Grouping(expr) => self.evaluate(expr)?,
@@ -274,7 +295,7 @@ impl Interpreter {
             Expression::Logical { left, op, right } => {
                 let left = self.evaluate(left)?;
                 let left_truthy = left.is_truthy();
-                let eval_right = match op.token_type {
+                let eval_right = match op.type_ {
                     TokenType::OR => !left_truthy,
                     TokenType::AND => left_truthy,
                     _ => unreachable!(),
@@ -297,7 +318,7 @@ impl Interpreter {
                         instance.borrow_mut().set(name, value.clone());
                         return Ok(value);
                     }
-                    _ => return Err(self.type_error(ONLY_INSTANCES_HAVE_FIELDS)),
+                    _ => return Err(Self::type_error(ONLY_INSTANCES_HAVE_FIELDS)),
                 }
             }
             Expression::Super {
@@ -307,36 +328,35 @@ impl Interpreter {
             } => {
                 let distance = *self.locals.get(id).expect("Super expression not resolved");
 
-                let Literal::Class(superclass) = self.environment.get_at(distance, "super")? else {
-                    return Err(self.type_error("Super reference must be a class."));
+                let Literal::Class(superclass) = self.environment.get_at(distance, "super") else {
+                    return Err(Self::type_error("Super reference must be a class."));
                 };
 
-                let Literal::Instance(object) =
-                    self.environment.get_at(distance - 1, THIS_KEYWORD)?
+                let Literal::Instance(object) = self.environment.get_at(distance - 1, THIS_KEYWORD)
                 else {
-                    return Err(self.type_error("'this' reference must be an instance."));
+                    return Err(Self::type_error("'this' reference must be an instance."));
                 };
 
                 let Some(method) = superclass.find_method(&method.lexeme) else {
                     let err_msg = format!("Undefined property '{}'.", method.lexeme);
-                    return Err(self.type_error(&err_msg));
+                    return Err(Self::type_error(&err_msg));
                 };
 
-                Literal::Function(Rc::new(method.bind(object)?))
+                Literal::Function(Rc::new(method.bind(object)))
             }
-            Expression::This { id, keyword } => self.lookup_variable(id, keyword)?,
+            Expression::This { id, keyword } => self.lookup_variable(*id, keyword)?,
             Expression::Unary { op, right } => {
                 let literal = self.evaluate(right)?;
-                match op.token_type {
+                match op.type_ {
                     TokenType::BANG => Literal::Boolean(!literal.is_truthy()),
                     TokenType::MINUS => match literal {
                         Literal::Number(n) => Literal::Number(-n),
-                        _ => return Err(self.type_error("Operand must be a number.")),
+                        _ => return Err(Self::type_error("Operand must be a number.")),
                     },
                     _ => unreachable!(),
                 }
             }
-            Expression::Variable { id, name } => self.lookup_variable(id, name)?,
+            Expression::Variable { id, name } => self.lookup_variable(*id, name)?,
         };
         Ok(literal)
     }
@@ -345,23 +365,21 @@ impl Interpreter {
         self.locals.insert(exp_id, depth);
     }
 
-    fn lookup_variable(&mut self, exp_id: &usize, name: &Token) -> InterpreterResult<Literal> {
-        if let Some(depth) = self.locals.get(exp_id) {
-            self.environment.get_at(*depth, &name.lexeme)
+    fn lookup_variable(&mut self, exp_id: usize, name: &Token) -> InterpreterResult<Literal> {
+        if let Some(depth) = self.locals.get(&exp_id) {
+            Ok(self.environment.get_at(*depth, &name.lexeme))
         } else {
             self.globals.get(name)
         }
     }
 
-    fn type_error(&self, message: &str) -> LoxError {
+    fn type_error(message: &str) -> LoxError {
         LoxError::TypeError(message.to_string())
     }
 }
 
 fn compare_number(op: &TokenType, l: f64, r: f64) -> bool {
     match op {
-        TokenType::EQUAL_EQUAL => l == r,
-        TokenType::BANG_EQUAL => l != r,
         TokenType::LESS => l < r,
         TokenType::LESS_EQUAL => l <= r,
         TokenType::GREATER => l > r,

@@ -79,7 +79,7 @@ impl TokenType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
-    pub token_type: TokenType,
+    pub type_: TokenType,
     pub lexeme: RcStr,
     pub literal: Option<Literal>,
     pub line: usize,
@@ -91,7 +91,7 @@ impl fmt::Display for Token {
             Some(value) => value.to_string(),
             None => "null".to_string(),
         };
-        write!(f, "{} {} {}", self.token_type, self.lexeme, literal)
+        write!(f, "{} {} {}", self.type_, self.lexeme, literal)
     }
 }
 
@@ -107,6 +107,7 @@ pub enum Literal {
 }
 
 impl Literal {
+    #[must_use]
     pub fn is_truthy(&self) -> bool {
         match self {
             Literal::Boolean(b) => *b,
@@ -208,13 +209,13 @@ impl fmt::Display for Expression {
             Expression::Assign { name, value, .. } => {
                 write!(f, "(assign {} {})", name.lexeme, value)
             }
-            Expression::Binary { left, op, right } => {
+            Expression::Binary { left, op, right } | Expression::Logical { left, op, right } => {
                 write!(f, "({} {} {})", op.lexeme, left, right)
             }
             Expression::Call { callee, arguments } => {
                 let args = arguments
                     .iter()
-                    .map(|arg| arg.to_string())
+                    .map(ToString::to_string)
                     .collect::<Vec<String>>()
                     .join(", ");
                 write!(f, "(call {callee} {args})")
@@ -223,9 +224,6 @@ impl fmt::Display for Expression {
                 write!(f, "(group {g})")
             }
             Expression::Literal(l) => write!(f, "{l}"),
-            Expression::Logical { left, op, right } => {
-                write!(f, "({} {} {})", op.lexeme, left, right)
-            }
             Expression::Set {
                 object,
                 name,
