@@ -8,6 +8,7 @@ This is a Rust implementation of the Lox language interpreter for the
 ## Features
 
 This interpreter supports a rich set of language features:
+
 - **Expressions**: Arithmetic operations, comparisons, logical operations
 - **Variables**: Declaration and assignment
 - **Control Flow**: If statements, while loops, for loops
@@ -20,7 +21,7 @@ This interpreter supports a rich set of language features:
 
 ## Getting Started
 
-1. Ensure you have `cargo (1.77)` installed locally
+1. Ensure you have `cargo (1.94+)` installed locally
 2. Run `./your_program.sh run <filename.lox>` to interpret a Lox script
 
 ## Usage Examples
@@ -44,6 +45,7 @@ The interpreter supports several modes:
 ## Lox Language Examples
 
 ### Variables and Control Flow
+
 ```js
 var a = 1;
 var b = 2;
@@ -55,6 +57,7 @@ if (a < b) {
 ```
 
 ### Functions
+
 ```js
 fun fibonacci(n) {
   if (n <= 1) return n;
@@ -65,12 +68,13 @@ print fibonacci(10);
 ```
 
 ### Classes and Inheritance
+
 ```js
 class Animal {
   init(name) {
     this.name = name;
   }
-  
+
   speak() {
     print this.name + " makes a noise";
   }
@@ -87,6 +91,7 @@ dog.speak();  // Prints: Rex barks
 ```
 
 ### Higher-Order Functions
+
 ```js
 fun makeCounter() {
   var i = 0;
@@ -105,6 +110,7 @@ print counter(); // 2
 ## Architecture
 
 The interpreter is structured in these key components:
+
 - **Scanner (`scanner.rs`)**: Tokenizes the source code into lexical tokens
 - **Parser (`parser.rs`)**: Builds an abstract syntax tree from tokens
 - **Resolver (`resolver.rs`)**: Performs variable resolution and semantic analysis
@@ -116,6 +122,7 @@ The interpreter is structured in these key components:
 ## Implementation Details
 
 The interpreter follows a classic compilation pipeline:
+
 1. **Scanning**: Converts source code into tokens
 2. **Parsing**: Transforms tokens into an Abstract Syntax Tree
 3. **Resolution**: Resolves variable references and performs static analysis
@@ -124,6 +131,7 @@ The interpreter follows a classic compilation pipeline:
 ### Error Handling
 
 The interpreter implements comprehensive error handling:
+
 - **Lexical errors**: Detected during scanning
 - **Syntax errors**: Reported during parsing
 - **Semantic errors**: Caught during resolution (e.g., undefined variables)
@@ -131,7 +139,19 @@ The interpreter implements comprehensive error handling:
 
 Each error provides meaningful context with line numbers and error messages.
 
+### Error Recovery
+
+The parser and resolver both implement error recovery to report multiple errors per run:
+
+- **Parser**: On error, synchronizes to the next statement boundary (`;` or keyword) and continues. Error recovery works at both the top level and inside blocks/functions.
+- **Resolver**: Collects per-statement errors and continues resolving remaining statements. Scope stack is truncated on error to maintain consistency.
+
 ## Performance Considerations
-- The interpreter uses Rust's ownership model for memory safety
-- Garbage collection is handled through Rust's reference counting (`Rc`) and interior mutability (`RefCell`)
-- Function and method lookups are optimized with hashmaps
+
+Memory management is optimized to minimize heap allocations on hot paths:
+
+- **`Rc<str>` for strings**: Token lexemes (`Token.lexeme`) and string values (`Literal::String`) use `Rc<str>`. Variable lookups, assignments, and function calls clone a refcount — no heap allocation.
+- **`Rc<Function>` for AST sharing**: Function declarations are wrapped in `Rc` at parse time. Defining closures and binding methods (`bind()`) bump a refcount — no deep-clone of the AST body.
+- **Byte-based scanner**: The scanner operates on `&[u8]` (1 byte/char). Substring extraction slices directly into the source buffer.
+- **Zero-copy token output**: `scan_tokens()` uses `std::mem::take` to move the token vec out — no per-token cloning.
+- **`Rc<str>` HashMap keys**: Environment variable maps and class method/field maps use `Rc<str>` keys, reusing the token's lexeme without allocating new strings.
