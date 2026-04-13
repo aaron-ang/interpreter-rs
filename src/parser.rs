@@ -1,7 +1,5 @@
 use std::rc::Rc;
 
-use anyhow::Result;
-
 use crate::{
     error::LoxError,
     grammar::{Expression, Function, Literal, Statement, Token, TokenType},
@@ -13,6 +11,7 @@ pub struct Parser<'a> {
     tokens: &'a [Token],
     current: usize,
     next_id: usize,
+    errors: Vec<LoxError>,
 }
 
 impl<'a> Parser<'a> {
@@ -22,17 +21,52 @@ impl<'a> Parser<'a> {
             tokens,
             current: 0,
             next_id: 0,
+            errors: Vec::new(),
         }
     }
 
-    /// # Errors
-    /// Returns a syntax error if the token stream contains invalid grammar.
-    pub fn parse(&mut self) -> Result<Vec<Statement>> {
+    /// Parses a full program. Errors are collected (not returned) and
+    /// accessible via [`errors()`](Self::errors).
+    pub fn parse(&mut self) -> Vec<Statement> {
         let mut statements = vec![];
         while !self.is_at_end() {
-            statements.push(self.declaration()?);
+            match self.declaration() {
+                Ok(stmt) => statements.push(stmt),
+                Err(e) => {
+                    self.errors.push(e);
+                    self.synchronize();
+                }
+            }
         }
-        Ok(statements)
+        statements
+    }
+
+    /// Returns any syntax errors collected during [`parse()`](Self::parse).
+    #[must_use]
+    pub fn errors(&self) -> &[LoxError] {
+        &self.errors
+    }
+
+    fn synchronize(&mut self) {
+        self.advance();
+        while !self.is_at_end() {
+            if self.previous().type_ == TokenType::SEMICOLON {
+                return;
+            }
+            match self.peek().type_ {
+                TokenType::CLASS
+                | TokenType::FUN
+                | TokenType::VAR
+                | TokenType::FOR
+                | TokenType::IF
+                | TokenType::WHILE
+                | TokenType::PRINT
+                | TokenType::RETURN => return,
+                _ => {
+                    self.advance();
+                }
+            }
+        }
     }
 
     fn declaration(&mut self) -> ParserResult<Statement> {
@@ -88,10 +122,8 @@ impl<'a> Parser<'a> {
         if !self.check(&TokenType::RIGHT_PAREN) {
             loop {
                 if params.len() >= 255 {
-                    return Err(Parser::error(
-                        self.peek(),
-                        "Can't have more than 255 parameters.",
-                    ));
+                    self.errors
+                        .push(Parser::error(self.peek(), "Can't have more than 255 parameters."));
                 }
                 params.push(
                     self.consume(&TokenType::IDENTIFIER, "Expect parameter name.")?
@@ -149,6 +181,10 @@ impl<'a> Parser<'a> {
             return Ok(Statement::Block(self.block()?));
         }
 
+        self.expression_statement()
+    }
+
+    fn expression_statement(&mut self) -> ParserResult<Statement> {
         let expression = self.expression()?;
         self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.")?;
         Ok(Statement::Expression(expression))
@@ -164,7 +200,7 @@ impl<'a> Parser<'a> {
         } else if self.match_(&[TokenType::VAR]) {
             Some(self.variable()?)
         } else {
-            Some(self.statement()?)
+            Some(self.expression_statement()?)
         };
 
         // Get the condition
@@ -245,7 +281,13 @@ impl<'a> Parser<'a> {
     fn block(&mut self) -> ParserResult<Vec<Statement>> {
         let mut statements = vec![];
         while !self.check(&TokenType::RIGHT_BRACE) && !self.is_at_end() {
-            statements.push(self.declaration()?);
+            match self.declaration() {
+                Ok(stmt) => statements.push(stmt),
+                Err(e) => {
+                    self.errors.push(e);
+                    self.synchronize();
+                }
+            }
         }
         self.consume(&TokenType::RIGHT_BRACE, "Expect '}' after block.")?;
         Ok(statements)
@@ -384,10 +426,8 @@ impl<'a> Parser<'a> {
         if !self.check(&TokenType::RIGHT_PAREN) {
             loop {
                 if arguments.len() >= 255 {
-                    return Err(Parser::error(
-                        self.peek(),
-                        "Can't have more than 255 arguments.",
-                    ));
+                    self.errors
+                        .push(Parser::error(self.peek(), "Can't have more than 255 arguments."));
                 }
                 arguments.push(self.expression()?);
                 if !self.match_(&[TokenType::COMMA]) {

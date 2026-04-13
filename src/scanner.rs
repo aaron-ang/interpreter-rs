@@ -60,7 +60,7 @@ impl<'a> Scanner<'a> {
             c if c.is_ascii_alphabetic() || c == b'_' => self.handle_identifier(),
             _ => {
                 self.report_error(format!(
-                    "[line {}] Error: Unexpected character: {}.",
+                    "[line {}] Error: Unexpected character: {}",
                     self.line, c as char
                 ));
             }

@@ -81,18 +81,21 @@ pub fn run(mode: Mode, input: &str, out: &mut dyn Write, err: &mut dyn Write) ->
         }
         Mode::Run => {
             let mut parser = Parser::new(&tokens);
-            let statements = match parser.parse() {
-                Ok(stmts) => stmts,
-                Err(e) => {
-                    write_err(err, &e.to_string());
-                    return SYNTAX_ERROR;
-                }
-            };
+            let statements = parser.parse();
+            for e in parser.errors() {
+                write_err(err, &e.to_string());
+            }
+            if !scanner.errors().is_empty() || !parser.errors().is_empty() {
+                return SYNTAX_ERROR;
+            }
+
             let mut interpreter = Interpreter::new_with_buffer();
             let mut resolver = Resolver::new(&mut interpreter);
-
-            if let Err(e) = resolver.resolve(&statements) {
-                write_err(err, &e.to_string());
+            resolver.resolve(&statements);
+            if !resolver.errors().is_empty() {
+                for e in resolver.errors() {
+                    write_err(err, &e.to_string());
+                }
                 return SYNTAX_ERROR;
             }
 

@@ -37,6 +37,7 @@ pub struct Resolver<'a> {
     scopes: Vec<HashMap<RcStr, bool>>,
     current_function: FunctionType,
     current_class: ClassType,
+    errors: Vec<LoxError>,
 }
 
 impl<'a> Resolver<'a> {
@@ -46,7 +47,34 @@ impl<'a> Resolver<'a> {
             scopes: Vec::new(),
             current_function: FunctionType::None,
             current_class: ClassType::None,
+            errors: Vec::new(),
         }
+    }
+
+    /// Resolves variable scopes for all statements. Errors are collected (not returned)
+    /// and accessible via [`errors()`](Self::errors).
+    pub fn resolve(&mut self, statements: &[Statement]) {
+        for statement in statements {
+            let scope_depth = self.scopes.len();
+            if let Err(e) = self.resolve_statement(statement) {
+                self.errors.push(e);
+                self.scopes.truncate(scope_depth);
+            }
+        }
+    }
+
+    /// Returns any semantic errors collected during [`resolve()`](Self::resolve).
+    #[must_use]
+    pub fn errors(&self) -> &[LoxError] {
+        &self.errors
+    }
+
+    /// Internal resolve used by block/function handlers — propagates errors via `?`.
+    fn resolve_stmts(&mut self, statements: &[Statement]) -> ResolverResult<()> {
+        for statement in statements {
+            self.resolve_statement(statement)?;
+        }
+        Ok(())
     }
 
     fn begin_scope(&mut self) {
@@ -73,21 +101,11 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// # Errors
-    /// Returns a syntax error on invalid variable usage (e.g. reading a variable in its own
-    /// initializer, duplicate declarations, or misuse of `this`/`super`/`return`).
-    pub fn resolve(&mut self, statements: &[Statement]) -> ResolverResult<()> {
-        for statement in statements {
-            self.resolve_statement(statement)?;
-        }
-        Ok(())
-    }
-
     fn resolve_statement(&mut self, statement: &Statement) -> ResolverResult<()> {
         match statement {
             Statement::Block(statements) => {
                 self.begin_scope();
-                self.resolve(statements)?;
+                self.resolve_stmts(statements)?;
                 self.end_scope();
             }
             Statement::Class {
@@ -261,7 +279,7 @@ impl<'a> Resolver<'a> {
             self.declare(param)?;
             self.define(param);
         }
-        self.resolve(&fun.body)?;
+        self.resolve_stmts(&fun.body)?;
         self.end_scope();
 
         self.current_function = enclosing_fun;
