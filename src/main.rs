@@ -1,6 +1,6 @@
 use std::{env, fs, process::ExitCode, str::FromStr};
 
-use interpreter_starter_rust::{cli_run, CliMode, CANNOT_OPEN_INPUT, COMMAND_LINE_USAGE};
+use interpreter_rs::{cli_run, CliMode, CANNOT_OPEN_INPUT, COMMAND_LINE_USAGE};
 
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();

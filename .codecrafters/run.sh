@@ -6,4 +6,4 @@
 #
 # Learn more: https://codecrafters.io/program-interface
 
-exec /tmp/codecrafters-interpreter-target/release/interpreter-starter-rust "$@"
+exec /tmp/codecrafters-interpreter-target/release/interpreter-rs "$@"
